@@ -1,0 +1,8 @@
+[SERVER]
+host = 'localhost'
+port = 5432
+
+[DATABASE]
+postgres_db = 'database'
+postgres_user = 'user'
+postgres_password = 'password'

@@ -1,25 +1,21 @@
 import socket
 import re
 import threading
-import json
-
-class User:
-    def __init__(self, username, password_hash, balance):
-        self.username = username
-        self.password_hash = password_hash
-        self.balance = balance
-
-class CommandException(Exception):
-    pass
+import toml
+import psycopg2
 
 class CommandHandler:
-    def __init__(self):
-        self.users = {}
-        self.logged_in_users = {}  
-
-        #временная заглушка, типа юзеры, типа хэш их паролей и баланс
-        self.users['Polina'] = User('Polina', '888', 500)
-        self.users['sowecthal'] = User('sowecthal', 'qwerty12345', 100)
+    def __init__(self, config):
+        self.config = config
+        self.connection = psycopg2.connect(
+            dbname=self.config['DATABASE']['postgres_db'],
+            user=self.config['DATABASE']['postgres_user'],
+            password=self.config['DATABASE']['postgres_password'],
+            host=self.config['SERVER']['host'],
+            port=self.config['SERVER']['port']
+        )
+        self.cursor = self.connection.cursor()
+        self.active_sessions = {} 
 
         self.command_functions = {
             'login': self.handleLogin,
@@ -44,55 +40,75 @@ class CommandHandler:
         if match:
             return match.groups()
         return None, None
-
+    
     def handleLogin(self, args):
         if not args:
             return 'Error: Missing username'
         
         username = args.strip()
-        if username in self.users:
-            self.logged_in_users[username] = True
+        query = 'SELECT * FROM users WHERE login = %s'
+        self.cursor.execute(query, (username,))
+        user = self.cursor.fetchone()
+        if user:
+            self.active_sessions[username] = True  
             return f'Enter password for user "{username}"'
         else:
             return 'Error: User not found'
 
-    def handleLogout(self, args):
-        if not self.logged_in_users:
+    def handleLogout(self, _):
+        if not self.active_sessions:
             return 'Error: No active login session'
         
-        username = next(iter(self.logged_in_users))
-        del self.logged_in_users[username]
+        username = next(iter(self.active_sessions))
+        del self.active_sessions[username]
         return f'User "{username}" logged out successfully'
 
     def handlePassword(self, args):
         if not args:
             return 'Error: Missing password'
-        if not self.logged_in_users:
+        if not self.active_sessions:
             return 'Error: No active login session'
         
-        username = next(iter(self.logged_in_users))
+        username = next(iter(self.active_sessions))
         password = args.strip()
-        if self.users[username].password_hash == password:
+        query = 'SELECT pass_hash FROM users WHERE login = %s'
+        self.cursor.execute(query, (username,))
+        correct_password_hash = self.cursor.fetchone()[0]
+        if correct_password_hash == password:
             return f'User "{username}" successfully authenticated'
         else:
             return 'Error: Incorrect password'
 
     def handleCalc(self, args):
-        if not self.logged_in_users:
+        if not self.active_sessions:
             return 'Error: No active login session'
 
-        username = next(iter(self.logged_in_users))
-        user = self.users[username]
-        if user.balance <= 0:
+        username = next(iter(self.active_sessions))
+        query = "SELECT balance FROM users WHERE login = %s"
+        self.cursor.execute(query, (username,))
+        user_balance = self.cursor.fetchone()[0]
+
+        if user_balance <= 0:
             return 'Error: Insufficient balance'
 
         try:
             result = eval(args)
         except Exception as e:
             return f'Error: Invalid expression: {str(e)}'
-        user.balance -= 1
 
-        return (str(result) + str(user.balance))
+        new_balance = user_balance - 1
+        update_query = "UPDATE users SET balance = %s WHERE login = %s"
+        self.cursor.execute(update_query, (new_balance, username))
+        
+        user_id_query = "SELECT id FROM users WHERE login = %s"
+        self.cursor.execute(user_id_query, (username,))
+        user_id = self.cursor.fetchone()[0]
+
+        log_query = 'INSERT INTO calc_history (user_id, expression, result) VALUES (%s, %s, %s)'
+        self.cursor.execute(log_query, (user_id, args, result))
+
+        self.connection.commit()
+        return str(result)
 
 def handleClient(client_socket, command_handler):
     while True:
@@ -100,25 +116,18 @@ def handleClient(client_socket, command_handler):
             request = client_socket.recv(1024).decode('ascii')
             response = command_handler.handleCommand(request)
             client_socket.send(response.encode('ascii'))
-        except CommandException as e:
-            client_socket.close()
-            break
         except Exception as e:
-
             client_socket.close()
             break
 
 def main():
-    command_handler = CommandHandler()
-
-    #временно, потом уйдет в конфиг
-    host = 'localhost'
-    port = 8888
+    config = toml.load('ConfigServerCalculator.toml')
+    command_handler = CommandHandler(config)
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # AF_INET = ipv4 & SOCK_STREAM = TCP
-    server.bind((host, port)) 
+    server.bind((config['SERVER']['host'], config['SERVER']['port']))
     server.listen()
-    print(f'Server started. Listening on port {port}...')
+    print(f'Server started. Listening on port {config["SERVER"]["port"]}...')
 
     try:
         while True:
