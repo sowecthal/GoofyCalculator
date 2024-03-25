@@ -4,18 +4,31 @@ import threading
 import toml
 import psycopg2
 
+from enum import Enum
+from dataclasses import dataclass
+
+class ConnectionState(Enum):
+    AWAITING_LOGIN = 1
+    AWAITING_PASSWORD = 2
+    AUTHENTICATED = 3
+
+@dataclass
+class User:
+ login: str
+ password_hash: str
+ balance: int
+
+class ClientConnection:
+    def __init__(self, socket):
+        self.socket = socket
+        self.user = None
+        self.state = ConnectionState.AWAITING_LOGIN
+
 class CommandHandler:
     def __init__(self, config):
         self.config = config
-        self.connection = psycopg2.connect(
-            dbname=self.config['DATABASE']['postgres_db'],
-            user=self.config['DATABASE']['postgres_user'],
-            password=self.config['DATABASE']['postgres_password'],
-            host=self.config['SERVER']['host'],
-            port=self.config['SERVER']['port']
-        )
+        self.connection = psycopg2.connect(**config['DATABASE'])
         self.cursor = self.connection.cursor()
-        self.active_sessions = {} 
 
         self.command_functions = {
             'login': self.handleLogin,
@@ -24,16 +37,16 @@ class CommandHandler:
             'calc': self.handleCalc
         }
 
-    def handleCommand(self, command):
+    def handleCommand(self, command, client_connection):
         action, args = self.parseCommand(command)
         if not action:
-            return 'Error: Invalid command syntax'
+            raise Exception('Error: Invalid command syntax')
 
         func = self.command_functions.get(action)
         if not func:
-            return 'Error: Invalid command'
+            raise Exception('Error: Invalid command')
 
-        return func(args)
+        return func(args, client_connection)
 
     def parseCommand(self, command):
         match = re.match(r'([a-zA-Z]+)\s*(\S+)?', command)
@@ -41,84 +54,96 @@ class CommandHandler:
             return match.groups()
         return None, None
     
-    def handleLogin(self, args):
+    def handleLogin(self, args, client_connection):
         if not args:
-            return 'Error: Missing username'
+            raise Exception('Error: Missing username')
+        
+        if client_connection.state != ConnectionState.AWAITING_LOGIN:
+            raise Exception('Error: Awaiting for login')
         
         username = args.strip()
-        query = 'SELECT * FROM users WHERE login = %s'
-        self.cursor.execute(query, (username,))
-        user = self.cursor.fetchone()
-        if user:
-            self.active_sessions[username] = True  
-            return f'Enter password for user "{username}"'
+
+        if not processed_users.get(username):
+            self.cursor.execute('SELECT login, pass_hash, balance FROM users WHERE login = %s', (username,))
+            user_data = self.cursor.fetchone()
+            if user_data:
+                process_user = User(username, user_data[1], user_data[2])
+                client_connection.user = process_user
+                processed_users[username] = process_user
+                client_connection.state = ConnectionState.AWAITING_PASSWORD
+
+                return f'You may proceed. Enter the password for {username}'
+            else:
+                raise Exception ('Error: No such login')
         else:
-            return 'Error: User not found'
+            client_connection.user = processed_users[username]
+            client_connection.state = ConnectionState.AWAITING_PASSWORD
 
-    def handleLogout(self, _):
-        if not self.active_sessions:
-            return 'Error: No active login session'
-        
-        username = next(iter(self.active_sessions))
-        del self.active_sessions[username]
-        return f'User "{username}" logged out successfully'
+            return f'You may proceed. Enter the password for {username}. You have another session'
 
-    def handlePassword(self, args):
+    def handlePassword(self, args, client_connection):
         if not args:
-            return 'Error: Missing password'
-        if not self.active_sessions:
-            return 'Error: No active login session'
+            raise Exception('Error: Missing password')
         
-        username = next(iter(self.active_sessions))
+        if client_connection.state != ConnectionState.AWAITING_PASSWORD:
+            raise Exception('Error: Awaiting for password')
+        
         password = args.strip()
-        query = 'SELECT pass_hash FROM users WHERE login = %s'
-        self.cursor.execute(query, (username,))
-        correct_password_hash = self.cursor.fetchone()[0]
+        username = client_connection.user.login
+        correct_password_hash = client_connection.user.password_hash
+        
         if correct_password_hash == password:
+            client_connection.state = ConnectionState.AUTHENTICATED
             return f'User "{username}" successfully authenticated'
         else:
-            return 'Error: Incorrect password'
+            raise Exception('Error: Incorrect password')
 
-    def handleCalc(self, args):
-        if not self.active_sessions:
-            return 'Error: No active login session'
+    def handleLogout(self, _, client_connection):
+        if client_connection.state != ConnectionState.AUTHENTICATED:
+            raise Exception('Error: No active login session to log out off')
+        
+        username = client_connection.user.login
 
-        username = next(iter(self.active_sessions))
-        query = "SELECT balance FROM users WHERE login = %s"
-        self.cursor.execute(query, (username,))
-        user_balance = self.cursor.fetchone()[0]
+        client_connection.user = None
+        client_connection.state = ConnectionState.AWAITING_LOGIN
+
+        return f'User "{username}" logged out successfully'
+    
+    def handleCalc(self, args, client_connection):
+        if client_connection.state != ConnectionState.AUTHENTICATED:
+            raise Exception('Error: No active login session')
+
+        username = client_connection.user.login
+
+        user_balance = client_connection.user.balance
 
         if user_balance <= 0:
-            return 'Error: Insufficient balance'
-
+            raise Exception('Error: Insufficient balance')
         try:
             result = eval(args)
         except Exception as e:
-            return f'Error: Invalid expression: {str(e)}'
+            raise Exception(f'Error: Invalid expression: {str(e)}')
 
-        new_balance = user_balance - 1
-        update_query = "UPDATE users SET balance = %s WHERE login = %s"
-        self.cursor.execute(update_query, (new_balance, username))
-        
-        user_id_query = "SELECT id FROM users WHERE login = %s"
-        self.cursor.execute(user_id_query, (username,))
+        self.cursor.execute('UPDATE users SET balance = %s WHERE login = %s', (user_balance - 1, username))
+
+        self.cursor.execute('SELECT id FROM users WHERE login = %s', (username,))
         user_id = self.cursor.fetchone()[0]
 
-        log_query = 'INSERT INTO calc_history (user_id, expression, result) VALUES (%s, %s, %s)'
-        self.cursor.execute(log_query, (user_id, args, result))
+        self.cursor.execute('INSERT INTO calc_history (user_id, expression, result) VALUES (%s, %s, %s)', (user_id, args, result))
 
         self.connection.commit()
         return str(result)
 
-def handleClient(client_socket, command_handler):
+def handleClient(client_socket, command_handler, client_connection):
     while True:
         try:
             request = client_socket.recv(1024).decode('ascii')
-            response = command_handler.handleCommand(request)
+            response = command_handler.handleCommand(request, client_connection)
             client_socket.send(response.encode('ascii'))
         except Exception as e:
+            client_socket.send(str(e).encode('ascii'))
             client_socket.close()
-            break
+            break   
 
 def main():
     config = toml.load('ConfigServerCalculator.toml')
@@ -134,10 +159,13 @@ def main():
             client_socket, client_address = server.accept()
             print(f'Client connected with {str(client_address)}')
 
-            client_thread = threading.Thread(target=handleClient, args=(client_socket, command_handler))
+            client_connection = ClientConnection(client_socket)
+                
+            client_thread = threading.Thread(target=handleClient, args=(client_socket, command_handler, client_connection))
             client_thread.start()
     except KeyboardInterrupt:
         print('Server stopped.')
 
-if __name__ == '__main__':
+if __name__ == '__main__':  
+    processed_users = {}
     main()
