@@ -3,7 +3,7 @@ host = 'localhost'
 port = 8888
 
 [DATABASE]
-dbname = 'database'
+database = 'database'
 user = 'user'
 password = 'password'
 host = 'localhost'

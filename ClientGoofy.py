@@ -1,22 +1,24 @@
-import socket
+import asyncio
+import toml
 
-def main():
-    host = 'localhost'
-    port = 8888
+async def main():
+    config = toml.load('ConfigServerCalculator.toml')
+    host = config['SERVER']['host'] 
+    port = config['SERVER']['port']
 
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((host, port))
+    reader, writer = await asyncio.open_connection(host, port)
 
-    try:
-        while True:
+    while True:
+        try:
             command = input('Enter your command: ')
-            client_socket.send(command.encode('ascii'))
+            writer.write(command.encode('ascii'))
+            await writer.drain()
 
-            response = client_socket.recv(1024).decode('ascii')
-            print(response)
-    except KeyboardInterrupt:
-        print('Client stopped working')
-        client_socket.close()
+            response = await reader.read(1024)
+            print(response.decode('ascii'))
+        except KeyboardInterrupt:
+            print('Client stopped working')
+            break
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
