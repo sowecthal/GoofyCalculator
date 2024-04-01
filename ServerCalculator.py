@@ -2,7 +2,7 @@ import re
 import toml
 import asyncio
 import asyncpg
-# import logging
+import logging
 
 from enum import Enum
 from dataclasses import dataclass
@@ -25,7 +25,7 @@ class User:
 class ClientConnection:
     def __init__(self, address):
         self.address = f'{address[0]}:{address[1]}'
-        print(f'New connection from {self.address}')
+        logging.info(f'New connection from {self.address}')
         self.user = None
         self.state = ConnectionState.AWAITING_LOGIN
 
@@ -135,26 +135,28 @@ async def handleClient(reader, writer, command_handler):
                 writer.write(response.encode('ascii'))
                 await writer.drain()
             except CommandException as e:
+                logging.error(str(e))
                 writer.write(str(e).encode('ascii'))
                 await writer.drain()
             except Exception as e:
-                print(f'An error occurred: {str(e)}')  
+                logging.error(f'An error occurred: {str(e)}')  
                 writer.write('An error occurred. Please try again'.encode('ascii'))
                 await writer.drain()
     except ConnectionAbortedError as e:
-            print(f'Client {client_connection.address} disconnected')
+            logging.info(f'Client {client_connection.address} disconnected')
 
 async def main():
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(name)s] [%(levelname)s] > %(message)s')
     config = toml.load('ConfigServerCalculator.toml')
     command_handler = CommandHandler(config)
     command_handler.pool = await asyncpg.create_pool(**config['DATABASE'])
-    print(f'Server started. Listening on port {config["SERVER"]["port"]}...')
+    logging.info(f'Server started. Listening on port {config["SERVER"]["port"]}...')
     
     try:
         server = await asyncio.start_server(lambda r, w: handleClient(r, w, command_handler), config['SERVER']['host'], config['SERVER']['port'])
         await server.serve_forever()
     except KeyboardInterrupt:
-        print('Server shutting down...')
+        logging.info('Server shutting down...')
         server.close()
         await server.wait_closed()
 
