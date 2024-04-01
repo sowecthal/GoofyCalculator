@@ -1,20 +1,6 @@
 import logging
 
-from enum import Enum
-from dataclasses import dataclass
-from .commandHandler import CommandHandler, CommandException
-
-class ConnectionState(Enum):
-    AWAITING_LOGIN = 1
-    AWAITING_PASSWORD = 2
-    AUTHENTICATED = 3
-
-@dataclass
-class User:
- id: int
- login: str
- password_hash: str
- balance: int
+from .commandHandler import CommandException, CommandHandler, ConnectionState
 
 class ClientConnection:
     def __init__(self, address):
@@ -34,7 +20,6 @@ async def handleClient(reader, writer, command_handler: CommandHandler):
                 writer.write(response.encode('ascii'))
                 await writer.drain()
             except CommandException as e:
-                logging.error(str(e))
                 writer.write(str(e).encode('ascii'))
                 await writer.drain()
             except Exception as e:

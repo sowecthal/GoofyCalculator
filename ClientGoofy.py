@@ -2,7 +2,7 @@ import asyncio
 import toml
 
 async def main():
-    config = toml.load('ConfigServerCalculator.toml')
+    config = toml.load('etc/ConfigServerCalculator.toml')
     host = config['SERVER']['host'] 
     port = config['SERVER']['port']
 

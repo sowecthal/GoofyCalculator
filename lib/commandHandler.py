@@ -1,10 +1,23 @@
 import re
 
+from enum import Enum
+from dataclasses import dataclass
 from .database import Database
-from .clientHandler import User, ConnectionState
 
 class CommandException(Exception):
     pass
+
+class ConnectionState(Enum):
+    AWAITING_LOGIN = 1
+    AWAITING_PASSWORD = 2
+    AUTHENTICATED = 3
+
+@dataclass
+class User:
+ id: int
+ login: str
+ password_hash: str
+ balance: int
 
 class CommandHandler:
     def __init__(self, db: Database, processed_users):

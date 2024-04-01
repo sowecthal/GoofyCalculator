@@ -7,7 +7,7 @@ from lib.commandHandler import CommandHandler
 from lib.clientHandler import handleClient
 
 async def main():
-    config = toml.load('ConfigServerCalculator.toml')
+    config = toml.load('etc/ConfigServerCalculator.toml')
     logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(name)s] [%(levelname)s] > %(message)s')
 
     db = Database(config)
@@ -18,7 +18,7 @@ async def main():
     command_handler = CommandHandler(db, processed_users)
     
     server = await asyncio.start_server(
-        lambda r, w: handleClient(r, w, command_handler, config, processed_users),
+        lambda r, w: handleClient(r, w, command_handler),
         config['SERVER']['host'],
         config['SERVER']['port']
     )
