@@ -2,9 +2,9 @@ import asyncio
 import logging
 import toml
 
-from lib.database import Database 
-from lib.commandHandler import CommandHandler
-from lib.clientHandler import handleClient
+from .database import Database 
+from .commandHandler import CommandHandler
+from .clientHandler import handleClient
 
 async def main():
     config = toml.load('etc/ConfigServerCalculator.toml')
