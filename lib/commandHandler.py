@@ -19,6 +19,7 @@ class User:
  password_hash: str
  balance: int
 
+
 class CommandHandler:
     def __init__(self, db: Database, processed_users):
         self.db = db
@@ -48,7 +49,7 @@ class CommandHandler:
         
         username = args.strip()
         if not self.processed_users.get(username):
-            user_data = await self.db.fetchrow('SELECT id, login, pass_hash, balance FROM users WHERE login = $1', username)
+            user_data = await self.db.fetchUserByLogin(username)
             if user_data:
                 process_user = User(user_data[0], user_data[1], user_data[2], user_data[3])
                 client_connection.user = process_user
@@ -93,8 +94,8 @@ class CommandHandler:
             client_connection.user.balance += 1
             raise CommandException(f'Error: Invalid expression: {str(e)}')
     
-        await self.db.execute("UPDATE users SET balance = $1 WHERE id = $2", user.balance, user.id)
-        await self.db.execute("INSERT INTO calc_history (user_id, expression, result) VALUES ($1, $2, $3)", user.id, args, result)
+        await self.db.updateUserBalance(user.balance, user.id)
+        await self.db.insertCalculationHistory(user.id, args, result)
 
         return str(result)
     
