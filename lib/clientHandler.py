@@ -20,6 +20,7 @@ async def handleClient(reader, writer, command_handler: CommandHandler):
                 writer.write(response.encode('ascii'))
                 await writer.drain()
             except CommandException as e:
+                logging.error(f'CommandException: {str(e)}. ConnectionState: {client_connection.state}')  
                 writer.write(str(e).encode('ascii'))
                 await writer.drain()
             except Exception as e:
