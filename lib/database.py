@@ -9,7 +9,7 @@ class Database:
         self.pool = await asyncpg.create_pool(**self.config['DATABASE'])
 
     async def fetchUserByLogin(self, login):
-        query = "SELECT id, login, pass_hash, balance FROM users WHERE login = $1"
+        query = "SELECT id, login, pass_hash, balance, role FROM users WHERE login = $1"
         async with self.pool.acquire() as conn:
             return await conn.fetchrow(query, login)
 
@@ -23,7 +23,7 @@ class Database:
         async with self.pool.acquire() as conn:
             await conn.execute(query, user_id, expression, result)
 
-    async def insertNewUser(self, login, pass_hash, balance=500):
-        query = "INSERT INTO users (login, pass_hash, balance) VALUES ($1, $2, $3)"
+    async def insertNewUser(self, login, pass_hash):
+        query = "INSERT INTO users (login, pass_hash) VALUES ($1, $2)"
         async with self.pool.acquire() as conn:
-            await conn.execute(query, login, pass_hash, balance)
+            await conn.execute(query, login, pass_hash)

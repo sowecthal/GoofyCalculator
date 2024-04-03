@@ -3,6 +3,7 @@ CREATE TABLE users (
 	login varchar(32) NOT NULL UNIQUE,
 	pass_hash varchar(32) NOT NULL,
 	balance int8 DEFAULT 100,
+	role varchar(32) NOT NULL,
 	created_at timestamptz DEFAULT now()
 );
 
