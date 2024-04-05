@@ -18,6 +18,7 @@ async def main():
             print(response.decode('ascii'))
         except KeyboardInterrupt:
             print('Client stopped working')
+            writer.close()
             break
 
 if __name__ == '__main__':

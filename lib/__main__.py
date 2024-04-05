@@ -8,7 +8,7 @@ from .clientHandler import handleClient
 
 async def main():
     config = toml.load('etc/ConfigServerCalculator.toml')
-    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(name)s] [%(levelname)s] > %(message)s')
+    logging.basicConfig(level=logging.DEBUG, format='[%(asctime)s] [%(name)s] [%(levelname)s] > %(message)s')
 
     db = Database(config)
     await db.createPool()

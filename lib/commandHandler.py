@@ -1,27 +1,12 @@
 import re
 import hashlib
 
-from enum import Enum
-from dataclasses import dataclass
 from .database import Database
+from .connection import ConnectionState
+from .user import User, Role
 
 class CommandException(Exception):
     pass
-
-
-class ConnectionState(Enum):
-    AWAITING_LOGIN = 1
-    AWAITING_PASSWORD = 2
-    AUTHENTICATED = 3
-
-
-@dataclass
-class User:
- id: int
- login: str
- password_hash: str
- balance: int
- role: str
 
 
 class CommandHandler:
@@ -48,7 +33,7 @@ class CommandHandler:
         return None, None
 
     async def handleRegister(self, args, client_connection):
-        if client_connection.user.role != 'admin':
+        if client_connection.user.role != Role.ADMIN.name:
             raise CommandException("Error: You don't have permission to register users")
         if len(args) != 2:
             raise CommandException("Error: Invalid number of arguments. Usage: register <USERNAME> <PASSWORD>")
@@ -74,7 +59,7 @@ class CommandHandler:
         if not self.processed_users.get(username):
             user_data = await self.db.fetchUserByLogin(username)
             if user_data:
-                process_user = User(user_data[0], user_data[1], user_data[2], user_data[3], user_data[4])
+                process_user = User(user_data[0], user_data[1], user_data[2], user_data[3], Role[user_data[4]])
                 client_connection.user = process_user
                 self.processed_users[username] = process_user
                 client_connection.state = ConnectionState.AWAITING_PASSWORD
@@ -130,7 +115,7 @@ class CommandHandler:
     async def handleBalance(self, args, client_connection):
         if client_connection.state != ConnectionState.AUTHENTICATED:
             raise CommandException('Error: No active login session')
-        if args and client_connection.user.role != 'admin':
+        if args and client_connection.user.role != Role.ADMIN.name:
             raise CommandException('Error: You only have permission to check your own balance. Usage: balance')
 
         if args:
@@ -166,38 +151,7 @@ class CommandHandler:
             else:
                 raise CommandException('Error: Invalid number of arguments. Usage: balance <MODE> <VALUE>')
         return str(client_connection.user.balance)
-    
-        # if not args:
-        #     return str(client_connection.user.balance)
-        # elif len(args) == 1:
-        #     username = args[0]
-        #     user_data = await self.db.fetchUserByLogin(username)
-        #     if not user_data:
-        #         raise CommandException('Error: User not found')
-        #     return str(user.balance)
-        # elif len(args) == 3:
-        #     username, mode, value = args
-        #     user = self.processed_users[username]
-        #     if not user:
-        #         raise CommandException('Error: User not found')
-        #     if mode not in ['set', 'add']:
-        #         raise CommandException("Error: Invalid mode. Mode should be 'set' or 'add'")
-            
-        #     try:
-        #         value = int(value)
-        #     except ValueError:
-        #         raise CommandException('Error: Value must be an integer')
-
-        #     if mode == 'set':
-        #         user.balance = value
-        #     elif mode == 'add':
-        #         user.balance += value
-                
-        #     await self.db.updateUserBalance(user.balance, user.id)
-        #     return f"Balance updated successfully for user '{username}'"
-        # else:
-        #     raise CommandException('Error: Invalid number of arguments. Usage: balance <MODE> <VALUE>')
-    
+       
     async def handleLogout(self, _, client_connection):
         if client_connection.state != ConnectionState.AUTHENTICATED:
             raise CommandException('Error: No active login session to log out off')
