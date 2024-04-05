@@ -2,7 +2,7 @@ import logging
 import asyncio
 
 from .commandHandler import CommandException, CommandHandler
-from . connection import ClientConnection
+from .connection import ClientConnection
 
 async def handleClient(reader, writer, command_handler: CommandHandler):
     client_connection = ClientConnection(reader._transport.get_extra_info('peername'))
@@ -13,11 +13,10 @@ async def handleClient(reader, writer, command_handler: CommandHandler):
                 logging.debug(f'Requested "{request}" from {client_connection.address}')
 
                 response = await command_handler.handleCommand(request, client_connection)
-                await asyncio.sleep(10)
                 writer.write(response.encode('ascii'))
                 await writer.drain()
             except CommandException as e:
-                logging.error(f'CommandException: {str(e)}. ConnectionState: {client_connection.state}. User info: {client_connection.user}')  
+                logging.error(f'CommandException: {str(e)}. ConnectionState: {client_connection.state}. User info: {client_connection.user}')
                 writer.write(str(e).encode('ascii'))
                 await writer.drain()
                 #raise e
@@ -28,5 +27,12 @@ async def handleClient(reader, writer, command_handler: CommandHandler):
                 #raise e
         else:
             raise ConnectionAbortedError()
-    except ConnectionAbortedError as e:
-            logging.info(f'Client {client_connection.address} disconnected')
+    except Exception as e:
+        logging.error('Unexpected error while processing client request')
+        if client_connection.user and client_connection in client_connection.user.connections:
+            client_connection.user.connections.remove(client_connection)
+            if len(client_connection.user.connections) == 0:
+                del command_handler.processed_users[client_connection.user.login]
+        logging.info(f'Client {client_connection.address} disconnected')
+        del client_connection
+

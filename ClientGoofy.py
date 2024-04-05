@@ -11,11 +11,12 @@ async def main():
     while True:
         try:
             command = input('Enter your command: ')
-            writer.write(command.encode('ascii'))
-            await writer.drain()
+            if command:
+                writer.write(command.encode('ascii'))
+                await writer.drain()
 
-            response = await reader.read(1024)
-            print(response.decode('ascii'))
+                response = await reader.read(1024)
+                print(response.decode('ascii'))
         except KeyboardInterrupt:
             print('Client stopped working')
             writer.close()

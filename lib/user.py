@@ -1,5 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
+from typing import List
 
 class Role(Enum):
     ADMIN = 1
@@ -13,4 +14,4 @@ class User:
  password_hash: str
  balance: int
  role: Role
- connections: list = []
+ connections: list

@@ -1,5 +1,6 @@
 import re
 import hashlib
+import logging
 
 from .database import Database
 from .connection import ConnectionState
@@ -20,7 +21,7 @@ class CommandHandler:
         
         if not action:
             raise CommandException('Error: Invalid command syntax')
-        func = getattr(self, f'handle{action.capitalize()}')
+        func = getattr(self, f'handle{action.capitalize()}', None)
         if not func:
             raise CommandException('Error: Invalid command')
         return await func(args, client_connection)
@@ -57,9 +58,10 @@ class CommandHandler:
         username = args[0]
         
         if not self.processed_users.get(username):
+            logging.debug(f'User \'{username}\' was taken from database')
             user_data = await self.db.fetchUserByLogin(username)
             if user_data:
-                process_user = User(user_data[0], user_data[1], user_data[2], user_data[3], Role[user_data[4]])
+                process_user = User(user_data[0], user_data[1], user_data[2], user_data[3], user_data[4], [client_connection,])
                 client_connection.user = process_user
                 self.processed_users[username] = process_user
                 client_connection.state = ConnectionState.AWAITING_PASSWORD
@@ -67,9 +69,13 @@ class CommandHandler:
             else:
                 raise CommandException('Error: No such login')
         else:
+            logging.debug(f'User \'{username}\' was taken from cache')
             client_connection.user = self.processed_users[username]
+
+            self.processed_users[username].connections.append(client_connection)
+
             client_connection.state = ConnectionState.AWAITING_PASSWORD
-            return f'You may proceed. Enter the password for {username}. You have another session'
+            return f'You may proceed. Enter the password for {username}'
 
     async def handlePassword(self, args, client_connection):
         if client_connection.state != ConnectionState.AWAITING_PASSWORD:
@@ -157,6 +163,8 @@ class CommandHandler:
             raise CommandException('Error: No active login session to log out off')
         
         username = client_connection.user.login
+        client_connection.user.connections.remove(client_connection)
         client_connection.user = None
+
         client_connection.state = ConnectionState.AWAITING_LOGIN
         return f'User "{username}" logged out successfully'
