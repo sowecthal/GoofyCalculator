@@ -1,17 +1,24 @@
-CREATE TABLE users (
-	id serial PRIMARY KEY,
-	login varchar(32) NOT NULL UNIQUE,
-	pass_hash varchar(32) NOT NULL,
-	balance int8 DEFAULT 100,
-	role varchar(32) NOT NULL,
-	created_at timestamptz DEFAULT now()
+CREATE TYPE role_type AS ENUM (
+    'USER',
+    'ADMIN'
 );
 
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    login VARCHAR(32) NOT NULL UNIQUE,
+    pass_hash VARCHAR(32) NOT NULL,
+    balance INTEGER DEFAULT 100,
+    role role_type DEFAULT 'USER',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO users (login, pass_hash, role) VALUES ('admin', '21232f297a57a5a743894a0e4a801fc3', 'ADMIN');
+
 CREATE TABLE calc_history (
-	id serial PRIMARY KEY,
-	ts timestamptz DEFAULT now(),
-	user_id integer NOT NULL,
-	expression text NOT NULL,
-	result real NOT NULL,
-	FOREIGN KEY (user_id) REFERENCES users 
+    id SERIAL PRIMARY KEY,
+    ts TIMESTAMPTZ DEFAULT NOW(),
+    user_id INTEGER NOT NULL,
+    expression TEXT NOT NULL,
+    result REAL NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users
 );
