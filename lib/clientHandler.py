@@ -19,12 +19,10 @@ async def handleClient(reader, writer, command_handler: CommandHandler):
                 logging.error(f'CommandException: {str(e)}. ConnectionState: {client_connection.state}. User info: {client_connection.user}')
                 writer.write(str(e).encode('ascii'))
                 await writer.drain()
-                #raise e
             except Exception as e:
                 logging.error(f'An error occurred: {str(e)}')  
                 writer.write('An error occurred. Please try again'.encode('ascii'))
                 await writer.drain()
-                #raise e
         else:
             raise ConnectionAbortedError()
     except Exception as e:

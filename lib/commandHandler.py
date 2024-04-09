@@ -168,3 +168,18 @@ class CommandHandler:
 
         client_connection.state = ConnectionState.AWAITING_LOGIN
         return f'User "{username}" logged out successfully'
+
+    async def handleExit(self, _, client_connection):
+        client_connection.user.connections.remove(client_connection)
+        client_connection.user = None
+        client_connection.state = ConnectionState.AWAITING_LOGIN
+
+        if client_connection.state == ConnectionState.AUTHENTICATED:
+            if client_connection.user and client_connection in client_connection.user.connections:
+                client_connection.user.connections.remove(client_connection)
+            if len(client_connection.user.connections) == 0:
+                del self.processed_users[client_connection.user.login]
+            logging.info(f'Client {client_connection.address} disconnected')
+            del client_connection
+
+        return f'Exited succesfully'
