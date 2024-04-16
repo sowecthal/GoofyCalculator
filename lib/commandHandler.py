@@ -10,6 +10,7 @@ class CommandException(Exception):
     pass
 
 
+
 class CommandHandler:
     def __init__(self, db: Database, processed_users):
         self.db = db
@@ -102,18 +103,18 @@ class CommandHandler:
             raise CommandException('Error: Invalid number of arguments. Usage: calc <EXPRESSION>')
         
         user = client_connection.user
+        user_data = await self.db.fetchUserByLogin(user.login)
         expression = args[0]
 
-        if client_connection.user.balance <= 0:
+        if user_data['balance'] <= 0:
             raise CommandException('Error: Insufficient balance')
         try:
-            client_connection.user.balance -= 1
+            await self.db.updateUserBalance(user.id, user_data['balance'] - 1)
             result = eval(expression)
         except Exception as e:
-            client_connection.user.balance += 1
+            await self.db.updateUserBalance(user.id, user_data['balance'] + 1)
             raise CommandException(f'Error: Invalid expression: {str(e)}')
     
-        await self.db.updateUserBalance(user.id, user.balance)
         await self.db.insertCalculationHistory(user.id, expression, result)
 
         return str(result)
@@ -153,10 +154,13 @@ class CommandHandler:
 
                 await self.db.updateUserBalance(user_data['id'], user_balance)
                 return f"Balance updated successfully for user '{username}'"
-
             else:
                 raise CommandException('Error: Invalid number of arguments. Usage: balance <MODE> <VALUE>')
-        return str(client_connection.user.balance)
+        
+        username = client_connection.user.login
+        user_data = await self.db.fetchUserByLogin(username)
+
+        return str(user_data['balance'])
        
     async def handleLogout(self, _, client_connection):
         if client_connection.state != ConnectionState.AUTHENTICATED:
